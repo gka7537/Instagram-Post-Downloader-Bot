@@ -22,10 +22,12 @@ def _get_logged_in_loader(ig_username: str = None, ig_password: str = None):
             if os.path.exists(session_file):
                 L.load_session_from_file(ig_username, session_file)
             else:
+                L.context.user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 293.0.33.108"
                 L.login(ig_username, ig_password)
                 L.save_session_to_file(ig_username)
         except Exception as e:
             try:
+                L.context.user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 293.0.33.108"
                 L.login(ig_username, ig_password)
                 L.save_session_to_file(ig_username)
             except Exception as login_err:
@@ -340,7 +342,7 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
                 break
 
         if not story_media_id or not target_username:
-            raise Exception("Invalid Story link! Please send a valid Instagram Story link.\nअमान्य स्टोरी लिंक! कृपया एक सही इंस्टाग्राम स्टोरी लिंक भेजें।")
+            raise Exception("Invalid Story link! Please send a valid Instagram Story link.\nअमान्य हाइलाइट लिंक! कृपया एक सही इंस्टाग्राम हाइलाइट लिंक भेजें।")
 
         profile = instaloader.Profile.from_username(L.context, target_username)
         downloaded = False
@@ -368,4 +370,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story / स्टोरी डाउनलोड करने में असमर्थ: {str(e)}")
-        
+    
