@@ -3,9 +3,6 @@ import shutil
 import instaloader
 
 def _get_logged_in_loader(ig_username: str = None, ig_password: str = None):
-    """
-    Creates an Instaloader instance and handles secure login via Session File or Password for protected features.
-    """
     L = instaloader.Instaloader(
         download_videos=True,
         download_pictures=True,
@@ -50,7 +47,6 @@ def get_profile_stats(username: str, ig_username: str = None, ig_password: str =
     }
 
 def download_specific_content(username: str, content_type: str, start_idx: int, end_idx: int, ig_username: str = None, ig_password: str = None) -> tuple:
-    # अगर लॉगिन डिटेल दी गई है तो लोडर का इस्तेमाल करें, वरना बिना लॉगिन के चलाएं
     if ig_username and ig_password:
         try:
             L = _get_logged_in_loader(ig_username, ig_password)
@@ -269,4 +265,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story: {str(e)}")
-          
+        
