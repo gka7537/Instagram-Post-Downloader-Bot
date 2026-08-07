@@ -1,7 +1,26 @@
 import os
+import ssl
 import shutil
+import glob
+import uuid
+import certifi
+from pathlib import Path
 import instaloader
 import yt_dlp
+
+# ── SSL & CA Certs Fix (Railway/Render एनवायरनमेंट के लिए) ──────────────────
+os.environ['SSL_CERT_FILE'] = certifi.where()
+os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+os.environ['PYTHONHTTPSVERIFY'] = '0'
+_orig_ssl_ctx = ssl.create_default_context
+def _patched_ssl_ctx(*args, **kwargs):
+    kwargs.setdefault('cafile', certifi.where())
+    return _orig_ssl_ctx(*args, **kwargs)
+ssl.create_default_context = _patched_ssl_ctx
+
+# ── Constants & Cookies File Setup ───────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent
+COOKIES_FILE = BASE_DIR / "cookies.txt"
 
 # 2FA स्टेट को सुरक्षित रखने के लिए ग्लोबल डिक्शनरी
 TEMP_LOGIN_SESSIONS = {}
@@ -89,7 +108,7 @@ def interactive_instagram_login(username: str, password: str, verification_code:
                 "👉 **क्या करें / What to do:**\n"
                 "1. अपने फोन में आधिकारिक Instagram ऐप खोलें / Open official Instagram app.\n"
                 "2. अगर 'It was me' (यह मैं ही हूँ) का ऑप्शन आए तो उसपर क्लिक करें / Click 'It was me' if it appears.\n"
-                "3. इसके बाद यहाँ दोबारा `/login` से प्रयास करें / Try `/login` here again."
+                "3. इसके बाद यहाँ दोबारा `/login` से प्रयास करें या इसके बजाय **Cookies.txt** विकल्प का चयन करें।"
             )
         return False, f"❌ Login Failed / लॉगिन विफल: {str(e)}"
 
@@ -150,8 +169,8 @@ def download_specific_content(username: str, start_idx: int, end_idx: int, ig_us
 
 def download_single_link(url_or_shortcode: str, ig_username: str = None, ig_password: str = None) -> tuple:
     """
-    पहले yt-dlp से कोशिश करता है। अगर फेल हो जाए या मल्टी-इमेज (फोटो+वीडियो) हो, 
-    तो instaloader (लॉगिन या बिना लॉगिन के) का उपयोग करता है।
+    पहले yt-dlp से स्मार्ट ऑप्शन (हेडर्स, स्लीप और Cookies.txt सपोर्ट) के साथ कोशिश करता है। 
+    अगर फेल हो जाए या मल्टी-इमेज (फोटो+वीडियो) हो, तो instaloader का उपयोग करता है।
     """
     if "instagram.com" not in url_or_shortcode:
         clean_input = url_or_shortcode.strip("/")
@@ -175,13 +194,26 @@ def download_single_link(url_or_shortcode: str, ig_username: str = None, ig_pass
 
     success_download = False
 
-    # 1. पहले yt-dlp से ट्राई करते हैं
+    # 1. Smart yt-dlp Options & Block-proof Headers + Cookies Integration
     ydl_opts = {
         'outtmpl': os.path.join(target_dir, '%(id)s.%(ext)s'),
-        'format': 'best',
+        'format': 'best[ext=mp4]/best',
         'quiet': True,
         'no_warnings': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': '*/*',
+        },
+        'sleep_interval': 1,
+        'max_sleep_interval': 3,
+        'nocheckcertificate': True,
     }
+
+    # अगर cookies.txt फाइल मौजूद है, तो उसे ऑटोमैटिकली लोड करेगा
+    if COOKIES_FILE.exists():
+        ydl_opts['cookiefile'] = str(COOKIES_FILE)
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -370,4 +402,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story / स्टोरी डाउनलोड करने में असमर्थ: {str(e)}")
-    
+            
