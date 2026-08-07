@@ -368,4 +368,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story / स्टोरी डाउनलोड करने में असमर्थ: {str(e)}")
-    
+        
