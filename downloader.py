@@ -28,6 +28,47 @@ def _get_logged_in_loader(ig_username: str = None, ig_password: str = None):
                 raise Exception(f"Instagram Login Failed: {str(login_err)}")
     return L
 
+def interactive_instagram_login(username: str, password: str, verification_code: str = None) -> tuple:
+    """
+    यूज़रनेम, पासवर्ड, 2FA और नई जगह से लॉगिन पर आने वाले सिक्योरिटी ब्लॉक्स को हैंडल करता है।
+    """
+    L = instaloader.Instaloader()
+    session_file = f"session-{username}"
+
+    if os.path.exists(session_file) and not verification_code:
+        try:
+            L.load_session_from_file(username)
+            return True, "Session loaded successfully!"
+        except Exception:
+            pass
+
+    try:
+        if verification_code:
+            L.two_factor_login(verification_code)
+            L.save_session_to_file(username)
+            return True, "2FA Login Successful & Session Saved!"
+        else:
+            L.login(username, password)
+            L.save_session_to_file(username)
+            return True, "Login Successful & Session Saved!"
+            
+    except instaloader.TwoFactorAuthRequiredException:
+        return "2FA_REQUIRED", "🔐 Two-Factor Authentication (2FA) is enabled. Please enter your 6-digit code:"
+    except instaloader.BadCredentialsException:
+        return False, "❌ Wrong username or password! Please check your details and try /login again."
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "challenge" in error_msg or "checkpoint" in error_msg or "susicious" in error_msg or "login attempt" in error_msg:
+            return "CHALLENGE_REQUIRED", (
+                "⚠️ **Instagram Security Block (New Location/IP Detection)!**\n"
+                "इंस्टाग्राम को लगता है कि यह लॉगिन किसी नई जगह से हो रहा है।\n\n"
+                "👉 **क्या करें:**\n"
+                "1. अपने फोन में आधिकारिक Instagram ऐप खोलें।\n"
+                "2. अगर 'It was me' (यह मैं ही हूँ) का ऑप्शन आए तो उसपर क्लिक करें।\n"
+                "3. इसके बाद यहाँ दोबारा `/login` से प्रयास करें।"
+            )
+        return False, f"❌ Login Failed: {str(e)}"
+
 def get_profile_stats(username: str, ig_username: str = None, ig_password: str = None) -> dict:
     L = instaloader.Instaloader(
         download_videos=False, download_pictures=False, download_geotags=False, download_comments=False, save_metadata=False
@@ -265,4 +306,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story: {str(e)}")
-        
+    
