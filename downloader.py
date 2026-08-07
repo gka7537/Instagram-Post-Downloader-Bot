@@ -1,6 +1,7 @@
 import os
 import shutil
 import instaloader
+import yt_dlp
 
 # 2FA स्टेट को सुरक्षित रखने के लिए ग्लोबल डिक्शनरी
 TEMP_LOGIN_SESSIONS = {}
@@ -39,7 +40,6 @@ def interactive_instagram_login(username: str, password: str, verification_code:
 
     try:
         if verification_code:
-            # पिछले सेव किए गए इंस्टेंस को वापस लाएं ताकि 2FA पेंडिंग एरर न आए
             L = TEMP_LOGIN_SESSIONS.get(username)
             if not L:
                 L = instaloader.Instaloader()
@@ -69,7 +69,6 @@ def interactive_instagram_login(username: str, password: str, verification_code:
             return True, "Login Successful & Session Saved!"
             
     except instaloader.TwoFactorAuthRequiredException:
-        # यहाँ इंस्टेंस को सुरक्षित रखा गया है ताकि अगले स्टेप में कोड इसी पर काम करे
         TEMP_LOGIN_SESSIONS[username] = L
         return "2FA_REQUIRED", "🔐 Two-Factor Authentication (2FA) is enabled. Please enter your 6-digit code:"
     except instaloader.BadCredentialsException:
@@ -147,34 +146,46 @@ def download_specific_content(username: str, start_idx: int, end_idx: int, ig_us
     return f"{zip_filename}.zip", count
 
 def download_single_link(url_or_shortcode: str) -> tuple:
-    L = instaloader.Instaloader(
-        download_videos=True, download_pictures=True, download_geotags=False, download_comments=False, save_metadata=False, compress_json=False
-    )
-    
-    clean_input = url_or_shortcode.split("?")[0].strip("/")
-    if "instagram.com" in clean_input:
-        parts = clean_input.split("/")
-        if "p" in parts:
-            shortcode = parts[parts.index("p") + 1]
-        elif "reel" in parts:
-            shortcode = parts[parts.index("reel") + 1]
-        else:
-            shortcode = parts[-1]
+    """
+    yt-dlp का उपयोग करके बिना किसी लॉगिन के सीधे पब्लिक पोस्ट या रील का वीडियो/तस्वीर डाउनलोड करता है।
+    """
+    if "instagram.com" not in url_or_shortcode:
+        clean_input = url_or_shortcode.strip("/")
+        url = f"https://www.instagram.com/p/{clean_input}/"
     else:
-        shortcode = clean_input
+        url = url_or_shortcode.split("?")[0]
 
-    target_dir = f"single_{shortcode}"
-    if os.path.exists(target_dir): shutil.rmtree(target_dir)
+    target_dir = "ytdlp_downloads"
+    if os.path.exists(target_dir): 
+        shutil.rmtree(target_dir)
     os.makedirs(target_dir, exist_ok=True)
 
-    post = instaloader.Post.from_shortcode(L.context, shortcode)
-    L.download_post(post, target=target_dir)
+    ydl_opts = {
+        'outtmpl': os.path.join(target_dir, '%(id)s.%(ext)s'),
+        'format': 'best',
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+    except Exception as e:
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir, ignore_errors=True)
+        raise Exception(f"Download failed: {str(e)}")
 
     files = []
     for root, _, filenames in os.walk(target_dir):
         for f in filenames:
-            if f.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4', '.mov')):
+            if f.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4', '.mov', '.webm')):
                 files.append(os.path.join(root, f))
+                
+    if not files:
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir, ignore_errors=True)
+        raise Exception("No media found or link is private/expired.")
+
     return files, target_dir
 
 def get_highlights_list(username: str, ig_username: str = None, ig_password: str = None):
@@ -326,3 +337,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story: {str(e)}")
+        
