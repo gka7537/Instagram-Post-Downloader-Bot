@@ -150,7 +150,7 @@ async def highlight_command(client: Client, message: Message):
     chat_id = message.chat.id
     login_data = ACTIVE_LOGINS.get(chat_id)
     if not login_data:
-        await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले `/login` करें।\n❌ Login required to download highlights! Please `/login` first.")
+        await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले `/login` करें。\n❌ Login required to download highlights! Please `/login` first.")
         return
     await message.reply_text("📂 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसके हाइलाइट्स देखने हैं:\nPlease send username/link to view highlights:")
     USER_STATE[chat_id] = {"step": "waiting_for_username"}
@@ -160,7 +160,7 @@ async def story_command(client: Client, message: Message):
     chat_id = message.chat.id
     login_data = ACTIVE_LOGINS.get(chat_id)
     if not login_data:
-        await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले `/login` करें।\n❌ Login required to download stories! Please `/login` first.")
+        await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले `/login` करें。\n❌ Login required to download stories! Please `/login` first.")
         return
     await message.reply_text("👀 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसकी स्टोरीज डाउनलोड करनी हैं:\nPlease send username/link to download stories:")
     USER_STATE[chat_id] = {"step": "waiting_for_story_username"}
@@ -238,7 +238,6 @@ async def handle_text_inputs(client: Client, message: Message):
             await status_msg.edit_text(f"❌ **Error / त्रुटि:** {str(e)}")
             USER_STATE.pop(chat_id, None)
         return
-
     if step == "waiting_for_range":
         target_username = state.get("target_username")
         try:
@@ -269,7 +268,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 await message.reply_document(document=zip_path, caption=f"✅ **@{target_username}** Posts ({start_idx}-{end_idx})\n📦 Total / कुल: {count}")
                 await status_msg.delete()
             else:
-                await status_msg.edit_text("❌ इस रेंज में कोई पोस्ट नहीं मिला।\n❌ No posts found in this range.")
+                await status_msg.edit_text("❌ इस रेंज में कोई पोस्ट नहीं मिला。\n❌ No posts found in this range.")
         except Exception as e:
             await status_msg.edit_text(f"❌ **Error / त्रुटि:** `{str(e)}`")
         finally:
@@ -281,7 +280,7 @@ async def handle_text_inputs(client: Client, message: Message):
     if "instagram.com/stories/" in text and "highlights" not in text:
         login_data = ACTIVE_LOGINS.get(chat_id)
         if not login_data:
-            await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले `/login` करें।\n❌ Login required to download stories! Please `/login` first.")
+            await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले `/login` करें。\n❌ Login required to download stories! Please `/login` first.")
             return
         status_msg = await message.reply_text("⏳ स्टोरी डाउनलोड की जा रही है...\n⏳ Downloading story...")
         target_dir = None
@@ -298,7 +297,7 @@ async def handle_text_inputs(client: Client, message: Message):
                         await message.reply_photo(photo=file, caption="✨ Story Downloaded via Bot / बोट द्वारा डाउनलोड की गई स्टोरी")
                 await status_msg.delete()
             else:
-                await status_msg.edit_text("❌ इस स्टोरी से कोई मीडिया नहीं मिला।\n❌ No media found in this story.")
+                await status_msg.edit_text("❌ इस स्टोरी से कोई मीडिया नहीं मिला。\n❌ No media found in this story.")
         except Exception as e:
             await status_msg.edit_text(f"❌ Error / त्रुटि: {str(e)}")
         finally:
@@ -309,7 +308,7 @@ async def handle_text_inputs(client: Client, message: Message):
     if "instagram.com/stories/highlights/" in text:
         login_data = ACTIVE_LOGINS.get(chat_id)
         if not login_data:
-            await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले `/login` करें।\n❌ Login required to download highlights! Please `/login` first.")
+            await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले `/login` करें。\n❌ Login required to download highlights! Please `/login` first.")
             return
         status_msg = await message.reply_text("⏳ हाइलाइट ZIP डाउनलोड की जा रही है...\n⏳ Downloading highlight ZIP...")
         zip_path = None
@@ -322,7 +321,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 await message.reply_document(document=zip_path, caption=f"✅ Highlight ZIP\n📦 Total / कुल: {count}")
                 await status_msg.delete()
             else:
-                await status_msg.edit_text("❌ हाइलाइट से कोई मीडिया नहीं मिला।\n❌ No media found in highlight.")
+                await status_msg.edit_text("❌ हाइलाइट से कोई मीडिया नहीं मिला。\n❌ No media found in highlight.")
         except Exception as e:
             await status_msg.edit_text(f"❌ Error / त्रुटि: {str(e)}")
         finally:
@@ -335,8 +334,13 @@ async def handle_text_inputs(client: Client, message: Message):
         status_msg = await message.reply_text("⏳ मीडिया डाउनलोड किया जा रहा है...\n⏳ Downloading media...")
         target_dir = None
         try:
+            login_data = ACTIVE_LOGINS.get(chat_id)
+            ig_u = login_data["username"] if login_data else None
+            ig_p = login_data["password"] if login_data else None
+
             loop = asyncio.get_running_loop()
-            files, target_dir = await loop.run_in_executor(None, download_single_link, text)
+            # यहाँ लॉगिन डिटेल्स पास की गई है ताकि फोटो+वीडियो (एल्बम) वाले पोस्ट्स बिना लॉगिन एरर के डाउनलोड हो सकें
+            files, target_dir = await loop.run_in_executor(None, download_single_link, text, ig_u, ig_p)
             if files:
                 for file in files:
                     if file.lower().endswith(('.mp4', '.mov', '.webm')):
@@ -345,7 +349,7 @@ async def handle_text_inputs(client: Client, message: Message):
                         await message.reply_photo(photo=file)
                 await status_msg.delete()
             else:
-                await status_msg.edit_text("❌ मीडिया नहीं मिला।\n❌ Media not found.")
+                await status_msg.edit_text("❌ मीडिया नहीं मिला。\n❌ Media not found.")
         except Exception as e:
             await status_msg.edit_text(f"❌ Error / त्रुटि: {str(e)}")
         finally:
@@ -363,7 +367,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 None, get_highlights_list, username, login_data["username"], login_data["password"]
             )
             if not highlights:
-                await status_msg.edit_text("❌ कोई हाइलाइट नहीं मिला।\n❌ No highlights found.")
+                await status_msg.edit_text("❌ कोई हाइलाइट नहीं मिला。\n❌ No highlights found.")
                 USER_STATE.pop(chat_id, None)
                 return
 
@@ -386,7 +390,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 None, download_user_stories, username, login_data["username"], login_data["password"]
             )
             if not files:
-                await status_msg.edit_text("❌ कोई एक्टिव स्टोरी नहीं मिली।\n❌ No active story found.")
+                await status_msg.edit_text("❌ कोई एक्टिव स्टोरी नहीं मिली。\n❌ No active story found.")
                 USER_STATE.pop(chat_id, None)
                 return
 
@@ -407,7 +411,7 @@ async def handle_text_inputs(client: Client, message: Message):
 
     username = text.split("instagram.com/")[1].split("?")[0].strip("/").split("/")[0] if "instagram.com/" in text else text.replace("@", "").strip()
     if " " in username or len(username) > 30:
-        await message.reply_text("❓ समझ नहीं आया। `/start` टाइप करें।\n❓ Didn't understand. Type `/start`.")
+        await message.reply_text("❓ समझ नहीं आया। `/start` टाइप करें。\n❓ Didn't understand. Type `/start`.")
         return
 
     login_data = ACTIVE_LOGINS.get(chat_id)
@@ -430,7 +434,7 @@ async def handle_text_inputs(client: Client, message: Message):
             )
             await status_msg.edit_text(info_text)
         else:
-            await status_msg.edit_text("❌ प्रोफाइल जानकारी नहीं मिली।\n❌ Profile info not found.")
+            await status_msg.edit_text("❌ प्रोफाइल जानकारी नहीं मिली。\n❌ Profile info not found.")
     except Exception as e:
         await status_msg.edit_text(f"❌ Error / त्रुटि: {str(e)}")
 
@@ -472,7 +476,7 @@ async def handle_highlight_callback(client: Client, callback_query: CallbackQuer
                     await callback_query.message.reply_text("🎉 सभी हाइलाइट्स डाउनलोड हो चुके हैं!\n🎉 All highlights downloaded successfully!")
                     USER_STATE.pop(chat_id, None)
         else:
-            await status_msg.edit_text("❌ इस हाइलाइट में कोई मीडिया नहीं मिला।\n❌ No media found in this highlight.")
+            await status_msg.edit_text("❌ इस हाइलाइट में कोई मीडिया नहीं मिला。\n❌ No media found in this highlight.")
     except Exception as e:
         await status_msg.edit_text(f"❌ Error / त्रुटि: {str(e)}")
     finally:
