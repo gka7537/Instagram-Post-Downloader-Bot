@@ -68,7 +68,7 @@ def get_join_markup_and_message():
         "बोट का उपयोग करने के लिए नीचे दिए गए सभी चैनलों को जॉइन करें:\n"
         "Please join all the channels given below to use the bot:\n\n"
         "💡 *Note: अगर आप पहले से जॉइन हैं, तो कृपया चैनल को Leave करके दोबारा Join करें!*\n"
-    ko    "💡 *Note: If you have already joined, please leave and join the channel again!*"
+        "💡 *Note: If you have already joined, please leave and join the channel again!*"
     )
     return text, InlineKeyboardMarkup(buttons)
 
