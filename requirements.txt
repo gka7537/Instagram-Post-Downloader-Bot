@@ -1,7 +1,17 @@
+# Core Frameworks
 Pyrogram==2.0.106
 tgcrypto==1.2.5
+Flask==3.0.3
+
+# Instagram & Media Processing
 instaloader==4.10.3
-flask==3.0.3
-requests==2.31.0
 instagrapi>=2.0.0
-yt-dlp
+yt-dlp>=2024.0.0
+requests==2.31.0
+
+# Essential Helpers for SSL, Files & Performance
+certifi
+Pillow
+cryptography
+aiohttp
+python-dotenv
