@@ -2,6 +2,9 @@ import os
 import shutil
 import instaloader
 
+# 2FA स्टेट को सुरक्षित रखने के लिए ग्लोबल डिक्शनरी
+TEMP_LOGIN_SESSIONS = {}
+
 def _get_logged_in_loader(ig_username: str = None, ig_password: str = None):
     L = instaloader.Instaloader(
         download_videos=True,
@@ -32,31 +35,50 @@ def interactive_instagram_login(username: str, password: str, verification_code:
     """
     यूज़रनेम, पासवर्ड, 2FA और नई जगह से लॉगिन पर आने वाले सिक्योरिटी ब्लॉक्स को हैंडल करता है।
     """
-    L = instaloader.Instaloader()
     session_file = f"session-{username}"
-
-    if os.path.exists(session_file) and not verification_code:
-        try:
-            L.load_session_from_file(username)
-            return True, "Session loaded successfully!"
-        except Exception:
-            pass
 
     try:
         if verification_code:
+            # पिछले सेव किए गए इंस्टेंस को वापस लाएं ताकि 2FA पेंडिंग एरर न आए
+            L = TEMP_LOGIN_SESSIONS.get(username)
+            if not L:
+                L = instaloader.Instaloader()
+                if os.path.exists(session_file):
+                    L.load_session_from_file(username)
+                else:
+                    L.login(username, password)
+            
             L.two_factor_login(verification_code)
             L.save_session_to_file(username)
+            
+            if username in TEMP_LOGIN_SESSIONS:
+                del TEMP_LOGIN_SESSIONS[username]
+                
             return True, "2FA Login Successful & Session Saved!"
         else:
+            L = instaloader.Instaloader()
+            if os.path.exists(session_file):
+                try:
+                    L.load_session_from_file(username)
+                    return True, "Session loaded successfully!"
+                except Exception:
+                    pass
+
             L.login(username, password)
             L.save_session_to_file(username)
             return True, "Login Successful & Session Saved!"
             
     except instaloader.TwoFactorAuthRequiredException:
+        # यहाँ इंस्टेंस को सुरक्षित रखा गया है ताकि अगले स्टेप में कोड इसी पर काम करे
+        TEMP_LOGIN_SESSIONS[username] = L
         return "2FA_REQUIRED", "🔐 Two-Factor Authentication (2FA) is enabled. Please enter your 6-digit code:"
     except instaloader.BadCredentialsException:
+        if username in TEMP_LOGIN_SESSIONS:
+            del TEMP_LOGIN_SESSIONS[username]
         return False, "❌ Wrong username or password! Please check your details and try /login again."
     except Exception as e:
+        if username in TEMP_LOGIN_SESSIONS:
+            del TEMP_LOGIN_SESSIONS[username]
         error_msg = str(e).lower()
         if "challenge" in error_msg or "checkpoint" in error_msg or "susicious" in error_msg or "login attempt" in error_msg:
             return "CHALLENGE_REQUIRED", (
@@ -304,4 +326,3 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story: {str(e)}")
-        
