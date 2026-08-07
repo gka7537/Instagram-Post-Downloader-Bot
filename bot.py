@@ -166,6 +166,7 @@ async def story_command(client: Client, message: Message):
     USER_STATE[chat_id] = {"step": "waiting_for_story_username"}
 
 @app.on_message(filters.text & ~filters.command(["start", "highlight", "story", "login"]))
+
 async def handle_text_inputs(client: Client, message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
@@ -238,7 +239,7 @@ async def handle_text_inputs(client: Client, message: Message):
             await status_msg.edit_text(f"❌ **Error:** {str(e)}")
             USER_STATE.pop(chat_id, None)
         return
-
+                
     if step == "waiting_for_range":
         target_username = state.get("target_username")
         try:
