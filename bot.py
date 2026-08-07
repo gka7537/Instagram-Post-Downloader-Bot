@@ -322,7 +322,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 await message.reply_document(document=zip_path, caption=f"✅ Highlight ZIP\n📦 Total / कुल: {count}")
                 await status_msg.delete()
             else:
-                await status_msg.edit_text("❌ हाइलाइट से कोई मीडिया नहीं मिला।\n❌ No media found in highlight.")
+                await status_msg.edit_text("❌ हाइलाइट से कोई मीडिया नहीं मिला。\n❌ No media found in highlight.")
         except Exception as e:
             await status_msg.edit_text(f"❌ Error / त्रुटि: {str(e)}")
         finally:
@@ -340,7 +340,6 @@ async def handle_text_inputs(client: Client, message: Message):
             ig_p = login_data["password"] if login_data else None
 
             loop = asyncio.get_running_loop()
-            # यहाँ लॉगिन डिटेल्स पास की गई है ताकि फोटो+वीडियो (एल्बम) वाले पोस्ट्स बिना लॉगिन एरर के डाउनलोड हो सकें
             files, target_dir = await loop.run_in_executor(None, download_single_link, text, ig_u, ig_p)
             if files:
                 for file in files:
@@ -492,5 +491,4 @@ if __name__ == "__main__":
     
     print("🤖 Bot & Web Server are running together...")
     app.run()
-    
     
