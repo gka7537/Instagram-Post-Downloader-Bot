@@ -68,7 +68,7 @@ def get_join_markup_and_message():
         "बोट का उपयोग करने के लिए नीचे दिए गए सभी चैनलों को जॉइन करें:\n"
         "Please join all the channels given below to use the bot:\n\n"
         "💡 *Note: अगर आप पहले से जॉइन हैं, तो कृपया चैनल को Leave करके दोबारा Join करें!*\n"
-        "💡 *Note: If you have already joined, please leave and join the channel again!*"
+    ko    "💡 *Note: If you have already joined, please leave and join the channel again!*"
     )
     return text, InlineKeyboardMarkup(buttons)
 
@@ -166,7 +166,6 @@ async def story_command(client: Client, message: Message):
     USER_STATE[chat_id] = {"step": "waiting_for_story_username"}
 
 @app.on_message(filters.text & ~filters.command(["start", "highlight", "story", "login"]))
-
 async def handle_text_inputs(client: Client, message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
@@ -239,7 +238,6 @@ async def handle_text_inputs(client: Client, message: Message):
             await status_msg.edit_text(f"❌ **Error:** {str(e)}")
             USER_STATE.pop(chat_id, None)
         return
-                
     if step == "waiting_for_range":
         target_username = state.get("target_username")
         try:
@@ -488,4 +486,4 @@ if __name__ == "__main__":
     
     print("🤖 Bot & Web Server are running together...")
     app.run()
-        
+                
