@@ -1,11 +1,13 @@
 import os
+import time
 import shutil
 import asyncio
 import threading
+import requests
 from flask import Flask
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from config import API_ID, API_HASH, BOT_TOKEN
+from config import API_ID, API_HASH, BOT_TOKEN, SHORTENER_API, SHORTENER_URL, VERIFY_EXPIRE_HOURS, FORCE_CHANNELS
 from downloader import (
     get_highlights_list, download_specific_highlight, download_single_link, 
     download_highlight_by_link, download_user_stories, download_story_by_link, 
@@ -13,39 +15,104 @@ from downloader import (
 )
 
 ACTIVE_LOGINS = {}
+USER_VERIFY = {}  # {chat_id: expiry_timestamp}
+MAX_DOWNLOAD_LIMIT = 50
 
-app = Client(
-    "insta_downloader_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN
-)
-
+app = Client("insta_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 USER_STATE = {}
 
 server = Flask(__name__)
-
 @server.route('/')
 def home():
     return "🤖 Instagram Downloader Bot is Active and Running!"
 
 def run_flask():
-    port = int(os.environ.get("PORT", 1000))
-    server.run(host="0.0.0.0", port=port)
+    server.run(host="0.0.0.0", port=int(os.environ.get("PORT", 1000)))
+
+def get_shortened_link(original_url):
+    if not SHORTENER_API or not SHORTENER_URL:
+        return original_url
+    try:
+        api_endpoint = f"https://{SHORTENER_URL}/api?api={SHORTENER_API}&url={original_url}"
+        response = requests.get(api_endpoint).json()
+        if response.get("status") == "success":
+            return response.get("shortenedUrl")
+    except:
+        pass
+    return original_url
+
+async def check_force_sub(client: Client, user_id: int):
+    if not FORCE_CHANNELS:
+        return []
+    
+    not_joined = []
+    for channel in FORCE_CHANNELS:
+        try:
+            member = await client.get_chat_member(channel, user_id)
+            if member.status in ["left", "kicked"]:
+                not_joined.append(channel)
+        except:
+            not_joined.append(channel)
+            
+    return not_joined
 
 @app.on_message(filters.command("start"))
 async def start_command(client: Client, message: Message):
+    chat_id = message.chat.id
+    
+    # यदि यूजर वेरीफिकेशन लिंक पर क्लिक करके आया है
+    if len(message.command) > 1 and message.command[1] == "verify":
+        USER_VERIFY[chat_id] = time.time() + (VERIFY_EXPIRE_HOURS * 3600)
+        await message.reply_text(f"🎉 **Verification Successful!**\n\nअब आप अगले {VERIFY_EXPIRE_HOURS} घंटे तक सभी Files और Albums डाउनलोड कर सकते हैं।")
+        return
+
+    # 1. मल्टीपल फोर्स सबस्क्रिप्शन चेक
+    missing_channels = await check_force_sub(client, chat_id)
+    if missing_channels:
+        buttons = [[InlineKeyboardButton(f"📢 Join {ch}", url=f"https://t.me/{ch.replace('@', '')}")] for ch in missing_channels]
+        buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data="check_sub")])
+        await message.reply_text(
+            "⚠️ **पहले चैनल जॉइन करें! / Please join the channel first!**\n\nबोट का उपयोग करने के लिए नीचे दिए गए सभी चैनलों को जॉइन करें:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    # 2. वेरीफिकेशन चेक (Render में दिए गए समय के अनुसार)
+    current_time = time.time()
+    expire_time = USER_VERIFY.get(chat_id, 0)
+    
+    if current_time > expire_time:
+        bot_info = await client.get_me()
+        verify_target_url = f"https://t.me/{bot_info.username}?start=verify"
+        short_link = get_shortened_link(verify_target_url)
+        
+        verify_btn = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Click Here to Verify", url=short_link)]])
+        await message.reply_text(
+            f"⚠️ **Verify once to get unlimited File & Album access for the next {VERIFY_EXPIRE_HOURS} hours!**\n\n"
+            f"एक बार वेरिफाई करें और अगले {VERIFY_EXPIRE_HOURS} घंटे तक सभी Files और Albums डाउनलोड करें।",
+            reply_markup=verify_btn
+        )
+        return
+
     help_text = (
         "🤖 **Instagram Advanced Downloader Bot**\n\n"
-        "✨ **कमांड्स:**\n"
-        "• `/login` - इंस्टाग्राम अकाउंट लॉगिन करें\n"
-        "• `/posts username start end` - पोस्ट्स डाउनलोड करें\n"
-        "• `/reels username start end` - रील्स डाउनलोड करें\n"
-        "• `/story` - स्टोरी डाउनलोड करें\n"
-        "• `/highlight` - हाइलाइट डाउनलोड करें\n"
-        "• किसी भी सिंगल पोस्ट/रील का लिंक सीधे भेजें।"
+        "✨ **इस्तेमाल करने का तरीका:**\n"
+        "1. `/login` - अकाउंट लॉगिन करें (परमानेंट सेशन)\n"
+        "2. किसी भी यूजर का **यूजरनेम या लिंक** भेजें $\rightarrow$ कुल पोस्ट्स दिखेंगे।\n"
+        "3. रेंज भेजें (जैसे: `1 20`) $\rightarrow$ ZIP फाइल मिल जाएगी।\n"
+        "4. `/story` या `/highlight` का उपयोग करें।"
     )
     await message.reply_text(help_text)
+
+@app.on_callback_query(filters.regex("check_sub"))
+async def sub_callback(client: Client, callback_query: CallbackQuery):
+    chat_id = callback_query.message.chat.id
+    missing_channels = await check_force_sub(client, chat_id)
+    if missing_channels:
+        await callback_query.answer("❌ आपने अभी तक सभी चैनल जॉइन नहीं किए हैं!", show_alert=True)
+    else:
+        await callback_query.message.delete()
+        await callback_query.message.reply_text("✅ धन्यवाद! अब आप `/start` टाइप करें।")
 
 @app.on_message(filters.command("login"))
 async def login_command(client: Client, message: Message):
@@ -58,7 +125,7 @@ async def highlight_command(client: Client, message: Message):
     chat_id = message.chat.id
     login_data = ACTIVE_LOGINS.get(chat_id)
     if not login_data:
-        await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता!\n\nकृपया पहले `/login` टाइप करके लॉगिन करें।")
+        await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले `/login` करें।")
         return
     await message.reply_text("📂 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसके हाइलाइट्स देखने हैं:")
     USER_STATE[chat_id] = {"step": "waiting_for_username"}
@@ -68,25 +135,39 @@ async def story_command(client: Client, message: Message):
     chat_id = message.chat.id
     login_data = ACTIVE_LOGINS.get(chat_id)
     if not login_data:
-        await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती!\n\nकृपया पहले `/login` टाइप करके लॉगिन करें।")
+        await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले `/login` करें।")
         return
     await message.reply_text("👀 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसकी स्टोरीज डाउनलोड करनी हैं:")
     USER_STATE[chat_id] = {"step": "waiting_for_story_username"}
 
-@app.on_message(filters.text & ~filters.command(["start", "posts", "reels", "highlight", "story", "login"]))
+@app.on_message(filters.text & ~filters.command(["start", "highlight", "story", "login"]))
 async def handle_text_inputs(client: Client, message: Message):
     chat_id = message.chat.id
     text = message.text.strip()
+    
+    # फोर्स सबस्क्रिप्शन चेक
+    missing_channels = await check_force_sub(client, chat_id)
+    if missing_channels:
+        buttons = [[InlineKeyboardButton(f"📢 Join {ch}", url=f"https://t.me/{ch.replace('@', '')}")] for ch in missing_channels]
+        buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data="check_sub")])
+        await message.reply_text("⚠️ **कृपया पहले सभी चैनल जॉइन करें!**", reply_markup=InlineKeyboardMarkup(buttons))
+        return
+
+    # वेरीफिकेशन चेक
+    if time.time() > USER_VERIFY.get(chat_id, 0):
+        await message.reply_text("⚠️ कृपया पहले `/start` भेजकर वेरीफाई करें!")
+        return
+
     state = USER_STATE.get(chat_id, {})
     step = state.get("step")
 
-    # 1. यूजरनेम लेना
+    # 1. Instagram Login - Step 1 (Username)
     if step == "waiting_for_ig_username":
         USER_STATE[chat_id] = {"step": "waiting_for_ig_password", "ig_username": text}
         await message.reply_text(f"✅ Username मिला: `{text}`\n\n🔑 अब अपना Instagram **Password** भेजें:")
         return
 
-    # 2. पासवर्ड चेक करना
+    # 2. Instagram Login - Step 2 (Password & Login execution)
     if step == "waiting_for_ig_password":
         username = state.get("ig_username")
         password = text
@@ -94,13 +175,11 @@ async def handle_text_inputs(client: Client, message: Message):
 
         try:
             loop = asyncio.get_running_loop()
-            success, msg = await loop.run_in_executor(
-                None, interactive_instagram_login, username, password, None
-            )
+            success, msg = await loop.run_in_executor(None, interactive_instagram_login, username, password, None)
 
             if success is True:
                 ACTIVE_LOGINS[chat_id] = {"username": username, "password": password}
-                await status_msg.edit_text(f"🎉 **Login Successful!**\n✨ {msg}")
+                await status_msg.edit_text(f"🎉 **Login Successful & Saved Permanently!**\n✨ {msg}")
                 USER_STATE.pop(chat_id, None)
             elif success == "2FA_REQUIRED":
                 USER_STATE[chat_id] = {"step": "waiting_for_2fa", "ig_username": username, "ig_password": password}
@@ -109,14 +188,14 @@ async def handle_text_inputs(client: Client, message: Message):
                 await status_msg.edit_text(msg)
                 USER_STATE.pop(chat_id, None)
             else:
-                await status_msg.edit_text(f"{msg}\n\n🔄 दोबारा कोशिश करने के लिए `/login` टाइप करें।")
+                await status_msg.edit_text(f"{msg}\n\n🔄 `/login` से दोबारा प्रयास करें।")
                 USER_STATE.pop(chat_id, None)
         except Exception as e:
-            await status_msg.edit_text(f"❌ **Error:** {str(e)}\n\n🔄 दोबारा कोशिश करने के लिए `/login` टाइप करें।")
+            await status_msg.edit_text(f"❌ **Error:** {str(e)}")
             USER_STATE.pop(chat_id, None)
         return
 
-    # 3. 2FA कोड चेक करना
+    # 3. Instagram Login - Step 3 (2FA Code Verification)
     if step == "waiting_for_2fa":
         username = state.get("ig_username")
         password = state.get("ig_password")
@@ -125,20 +204,58 @@ async def handle_text_inputs(client: Client, message: Message):
 
         try:
             loop = asyncio.get_running_loop()
-            success, msg = await loop.run_in_executor(
-                None, interactive_instagram_login, username, password, code
-            )
+            success, msg = await loop.run_in_executor(None, interactive_instagram_login, username, password, code)
 
             if success is True:
                 ACTIVE_LOGINS[chat_id] = {"username": username, "password": password}
-                await status_msg.edit_text(f"🎉 **2FA Verification Successful!**\n✨ {msg}")
+                await status_msg.edit_text(f"🎉 **2FA Success & Permanent Session Saved!**\n✨ {msg}")
                 USER_STATE.pop(chat_id, None)
             else:
-                await status_msg.edit_text(f"❌ **Wrong 2FA Code!**\n{msg}\n\n🔄 दोबारा लॉगिन करने के लिए फ़िर से `/login` टाइप करें।")
+                await status_msg.edit_text(f"❌ **Wrong 2FA Code!**\n{msg}")
                 USER_STATE.pop(chat_id, None)
         except Exception as e:
-            await status_msg.edit_text(f"❌ **Error:** {str(e)}\n\n🔄 दोबारा कोशिश करने के लिए `/login` टाइप करें।")
+            await status_msg.edit_text(f"❌ **Error:** {str(e)}")
             USER_STATE.pop(chat_id, None)
+        return
+
+    # 4. Profile Range Download Step
+    if step == "waiting_for_range":
+        target_username = state.get("target_username")
+        try:
+            parts = text.replace(",", " ").split()
+            if len(parts) != 2: raise ValueError
+            start_idx, end_idx = int(parts[0]), int(parts[1])
+        except ValueError:
+            await message.reply_text("❌ गलत फॉर्मेट! केवल दो नंबर दें (जैसे: `1 20`):")
+            return
+
+        if (end_idx - start_idx + 1) > MAX_DOWNLOAD_LIMIT:
+            await message.reply_text(f"⚠️ अधिकतम लिमिट **{MAX_DOWNLOAD_LIMIT}** पोस्ट की है!")
+            return
+
+        USER_STATE.pop(chat_id, None)
+        login_data = ACTIVE_LOGINS.get(chat_id)
+        ig_u = login_data["username"] if login_data else None
+        ig_p = login_data["password"] if login_data else None
+
+        status_msg = await message.reply_text(f"⏳ **@{target_username}** के पोस्ट्स डाउनलोड हो रहे हैं...")
+        zip_path = None
+        try:
+            loop = asyncio.get_running_loop()
+            zip_path, count = await loop.run_in_executor(None, download_specific_content, target_username, start_idx, end_idx, ig_u, ig_p)
+
+            if zip_path and os.path.exists(zip_path):
+                await status_msg.edit_text(f"📤 ZIP फाइल भेजी जा रही है...")
+                await message.reply_document(document=zip_path, caption=f"✅ **@{target_username}** Posts ({start_idx}-{end_idx})\n📦 Total: {count}")
+                await status_msg.delete()
+            else:
+                await status_msg.edit_text("❌ इस रेंज में कोई पोस्ट नहीं मिला।")
+        except Exception as e:
+            await status_msg.edit_text(f"❌ **Error:** `{str(e)}`")
+        finally:
+            if zip_path and os.path.exists(zip_path):
+                try: os.remove(zip_path)
+                except: pass
         return
 
     # डायरेक्ट स्टोरी लिंक
@@ -201,10 +318,8 @@ async def handle_text_inputs(client: Client, message: Message):
         status_msg = await message.reply_text("⏳ मीडिया डाउनलोड किया जा रहा है...")
         target_dir = None
         try:
-            parts = text.split("instagram.com/")[1].split("?")[0].strip("/").split("/")
-            shortcode = parts[1] if len(parts) > 1 else parts[0]
             loop = asyncio.get_running_loop()
-            files, target_dir = await loop.run_in_executor(None, download_single_link, shortcode)
+            files, target_dir = await loop.run_in_executor(None, download_single_link, text)
             if files:
                 for file in files:
                     if file.lower().endswith(('.mp4', '.mov')):
@@ -273,6 +388,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 shutil.rmtree(target_dir, ignore_errors=True)
         return
 
+    # यूजरनेम या प्रोफाइल लिंक भेजने पर कुल पोस्ट दिखाना और रेंज पूछना
     username = text.split("instagram.com/")[1].split("?")[0].strip("/").split("/")[0] if "instagram.com/" in text else text.replace("@", "").strip()
     if " " in username or len(username) > 30:
         await message.reply_text("❓ समझ नहीं आया। `/start` टाइप करें।")
@@ -287,14 +403,14 @@ async def handle_text_inputs(client: Client, message: Message):
         loop = asyncio.get_running_loop()
         stats = await loop.run_in_executor(None, get_profile_stats, username, ig_u, ig_p)
         if stats:
+            USER_STATE[chat_id] = {"step": "waiting_for_range", "target_username": stats['username']}
             info_text = (
                 f"📊 **Instagram Profile Info**\n\n"
                 f"👤 **Username:** `@{stats['username']}`\n"
                 f"📦 **Total Posts:** `{stats['total_posts']}`\n"
                 f"🔒 **Account Type:** `{'Private ❌' if stats['is_private'] else 'Public ✅'}`\n\n"
-                f"💡 **डाउनलोड कमांड:**\n"
-                f"• `/posts {stats['username']} 1 100`\n"
-                f"• `/reels {stats['username']} 1 50`"
+                f"⚡ **डाउनलोड लिमिट:** अधिकतम **{MAX_DOWNLOAD_LIMIT}** पोस्ट्स प्रति बार।\n\n"
+                f"📥 **अब रेंज भेजें** (जैसे: `1 20`):"
             )
             await status_msg.edit_text(info_text)
         else:
@@ -320,39 +436,4 @@ async def handle_highlight_callback(client: Client, callback_query: CallbackQuer
 
     zip_path = None
     try:
-        loop = asyncio.get_running_loop()
-        zip_path, count = await loop.run_in_executor(
-            None, download_specific_highlight, username, hl_title, login_data["username"], login_data["password"]
-        )
-        if zip_path and os.path.exists(zip_path):
-            await callback_query.message.reply_document(document=zip_path, caption=f"✅ Highlight: `{hl_title}`\n📦 Count: {count}")
-            await status_msg.delete()
-
-            if chat_id in USER_STATE:
-                if "downloaded" not in USER_STATE[chat_id]: USER_STATE[chat_id]["downloaded"] = []
-                USER_STATE[chat_id]["downloaded"].append(hl_title)
-                
-                remaining = [h for h in USER_STATE[chat_id]["highlights"] if h['title'] not in USER_STATE[chat_id]["downloaded"]]
-                if remaining:
-                    buttons = [[InlineKeyboardButton(f"📁 {h['title']}", callback_data=f"dl_hl_{username}_{h['title'][:20]}")] for h in remaining]
-                    await callback_query.message.reply_text("👇 **बाकी बचे हाइलाइट्स:**", reply_markup=InlineKeyboardMarkup(buttons))
-                else:
-                    await callback_query.message.reply_text("🎉 सभी हाइलाइट्स डाउनलोड हो चुके हैं!")
-                    USER_STATE.pop(chat_id, None)
-        else:
-            await status_msg.edit_text("❌ इस हाइलाइट में कोई मीडिया नहीं मिला।")
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Error: {str(e)}")
-    finally:
-        if zip_path and os.path.exists(zip_path):
-            try: os.remove(zip_path)
-            except: pass
-
-if __name__ == "__main__":
-    t = threading.Thread(target=run_flask)
-    t.daemon = True
-    t.start()
-    
-    print("🤖 Bot & Web Server are running together...")
-    app.run()
-        
+   
