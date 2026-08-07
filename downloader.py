@@ -87,7 +87,7 @@ def get_profile_stats(username: str, ig_username: str = None, ig_password: str =
         "is_private": profile.is_private
     }
 
-def download_specific_content(username: str, content_type: str, start_idx: int, end_idx: int, ig_username: str = None, ig_password: str = None) -> tuple:
+def download_specific_content(username: str, start_idx: int, end_idx: int, ig_username: str = None, ig_password: str = None) -> tuple:
     if ig_username and ig_password:
         try:
             L = _get_logged_in_loader(ig_username, ig_password)
@@ -97,7 +97,7 @@ def download_specific_content(username: str, content_type: str, start_idx: int, 
         L = instaloader.Instaloader(download_videos=True, download_pictures=True, save_metadata=False, compress_json=False)
 
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
-    target_dir = f"temp_{clean_username}_{content_type}"
+    target_dir = f"temp_{clean_username}_posts"
     if os.path.exists(target_dir): shutil.rmtree(target_dir)
     os.makedirs(target_dir, exist_ok=True)
 
@@ -106,8 +106,6 @@ def download_specific_content(username: str, content_type: str, start_idx: int, 
     iterator = profile.get_posts()
 
     for idx, post in enumerate(iterator, start=1):
-        if content_type == 'reels' and not post.is_video:
-            continue
         if start_idx <= idx <= end_idx:
             try:
                 L.download_post(post, target=target_dir)
@@ -121,7 +119,7 @@ def download_specific_content(username: str, content_type: str, start_idx: int, 
         shutil.rmtree(target_dir, ignore_errors=True)
         return None, 0
 
-    zip_filename = f"{clean_username}_{content_type}_{start_idx}_to_{end_idx}"
+    zip_filename = f"{clean_username}_posts_{start_idx}_to_{end_idx}"
     shutil.make_archive(zip_filename, 'zip', target_dir)
     shutil.rmtree(target_dir, ignore_errors=True)
     return f"{zip_filename}.zip", count
@@ -159,7 +157,7 @@ def download_single_link(url_or_shortcode: str) -> tuple:
 
 def get_highlights_list(username: str, ig_username: str = None, ig_password: str = None):
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to view highlights. Please set IG_USERNAME and IG_PASSWORD.")
+        raise Exception("Instagram login is mandatory to view highlights. Please login first using /login.")
     
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -169,7 +167,7 @@ def get_highlights_list(username: str, ig_username: str = None, ig_password: str
 
 def download_specific_highlight(username: str, highlight_title: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download highlights. Please set IG_USERNAME and IG_PASSWORD.")
+        raise Exception("Instagram login is mandatory to download highlights. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -199,7 +197,7 @@ def download_specific_highlight(username: str, highlight_title: str, ig_username
 
 def download_highlight_by_link(url: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download highlights. Please set IG_USERNAME and IG_PASSWORD.")
+        raise Exception("Instagram login is mandatory to download highlights. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     target_dir = "highlight_direct"
@@ -232,7 +230,7 @@ def download_highlight_by_link(url: str, ig_username: str = None, ig_password: s
 
 def download_user_stories(username: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download stories. Please set IG_USERNAME and IG_PASSWORD.")
+        raise Exception("Instagram login is mandatory to download stories. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -256,7 +254,7 @@ def download_user_stories(username: str, ig_username: str = None, ig_password: s
 
 def download_story_by_link(url: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download stories. Please set IG_USERNAME and IG_PASSWORD.")
+        raise Exception("Instagram login is mandatory to download stories. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     target_dir = "story_direct"
@@ -306,4 +304,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story: {str(e)}")
-    
+        
