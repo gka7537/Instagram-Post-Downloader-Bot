@@ -6,8 +6,6 @@ from flask import Flask
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from config import API_ID, API_HASH, BOT_TOKEN
-
-# यहाँ utils. हटा दिया गया है क्योंकि फाइल अब साथ में है
 from downloader import (
     get_highlights_list, download_specific_highlight, download_single_link, 
     download_highlight_by_link, download_user_stories, download_story_by_link, 
@@ -17,6 +15,7 @@ from downloader import (
 IG_USERNAME = os.getenv("IG_USERNAME")
 IG_PASSWORD = os.getenv("IG_PASSWORD")
 
+# Pyrogram Bot Client
 app = Client(
     "insta_downloader_bot",
     api_id=API_ID,
@@ -26,6 +25,7 @@ app = Client(
 
 USER_STATE = {}
 
+# --- Flask Web Server (Port 1000) ---
 server = Flask(__name__)
 
 @server.route('/')
@@ -33,8 +33,9 @@ def home():
     return "🤖 Instagram Downloader Bot is Active and Running!"
 
 def run_flask():
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 1000))
     server.run(host="0.0.0.0", port=port)
+# -------------------------------------------------------------
 
 @app.on_message(filters.command("start"))
 async def start_command(client: Client, message: Message):
@@ -49,6 +50,7 @@ async def start_command(client: Client, message: Message):
     )
     await message.reply_text(help_text)
 
+# 1. /posts कमांड
 @app.on_message(filters.command("posts"))
 async def handle_posts_command(client: Client, message: Message):
     args = message.command
@@ -85,6 +87,7 @@ async def handle_posts_command(client: Client, message: Message):
             try: os.remove(zip_path)
             except: pass
 
+# 2. /reels कमांड
 @app.on_message(filters.command("reels"))
 async def handle_reels_command(client: Client, message: Message):
     args = message.command
@@ -121,23 +124,27 @@ async def handle_reels_command(client: Client, message: Message):
             try: os.remove(zip_path)
             except: pass
 
+# 3. /highlight कमांड
 @app.on_message(filters.command("highlight"))
 async def highlight_command(client: Client, message: Message):
     chat_id = message.chat.id
     await message.reply_text("📂 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसके हाइलाइट्स देखने हैं:")
     USER_STATE[chat_id] = {"step": "waiting_for_username"}
 
+# 4. /story कमांड
 @app.on_message(filters.command("story"))
 async def story_command(client: Client, message: Message):
     chat_id = message.chat.id
     await message.reply_text("👀 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसकी स्टोरीज डाउनलोड करनी हैं:")
     USER_STATE[chat_id] = {"step": "waiting_for_story_username"}
 
+# टेक्स्ट और लिंक हैंडलर
 @app.on_message(filters.text & ~filters.command(["start", "posts", "reels", "highlight", "story"]))
 async def handle_text_inputs(client: Client, message: Message):
     chat_id = message.chat.id
     text = message.text.strip()
     
+    # डायरेक्ट स्टोरी लिंक
     if "instagram.com/stories/" in text and "highlights" not in text:
         status_msg = await message.reply_text("⏳ स्टोरी डाउनलोड की जा रही है...")
         target_dir = None
@@ -160,6 +167,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 shutil.rmtree(target_dir, ignore_errors=True)
         return
 
+    # डायरेक्ट हाइलाइट लिंक
     if "instagram.com/stories/highlights/" in text:
         status_msg = await message.reply_text("⏳ हाइलाइट ZIP डाउनलोड की जा रही है...")
         zip_path = None
@@ -179,6 +187,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 except: pass
         return
 
+    # सिंगल पोस्ट/रील लिंक
     if "instagram.com/p/" in text or "instagram.com/reel/" in text:
         status_msg = await message.reply_text("⏳ मीडिया डाउनलोड किया जा रहा है...")
         target_dir = None
@@ -203,6 +212,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 shutil.rmtree(target_dir, ignore_errors=True)
         return
 
+    # /highlight स्टेट हैंडलर
     if USER_STATE.get(chat_id, {}).get("step") == "waiting_for_username":
         username = text.split("instagram.com/")[1].split("?")[0].strip("/").split("/")[0] if "instagram.com/" in text else text.replace("@", "").strip()
         status_msg = await message.reply_text(f"🔍 **@{username}** के हाइलाइट्स खोजे जा रहे हैं...")
@@ -222,6 +232,7 @@ async def handle_text_inputs(client: Client, message: Message):
             USER_STATE.pop(chat_id, None)
         return
 
+    # /story स्टेट हैंडलर
     if USER_STATE.get(chat_id, {}).get("step") == "waiting_for_story_username":
         username = text.split("instagram.com/")[1].split("?")[0].strip("/").split("/")[0] if "instagram.com/" in text else text.replace("@", "").strip()
         status_msg = await message.reply_text(f"🔍 **@{username}** की स्टोरीज खोजी जा रही हैं...")
@@ -249,6 +260,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 shutil.rmtree(target_dir, ignore_errors=True)
         return
 
+    # साधारण यूजरनेम भेजने पर प्रोफाइल स्टेट्स दिखाना
     username = text.split("instagram.com/")[1].split("?")[0].strip("/").split("/")[0] if "instagram.com/" in text else text.replace("@", "").strip()
     if " " in username or len(username) > 30:
         await message.reply_text("❓ समझ नहीं आया। `/start` टाइप करें।")
@@ -274,6 +286,7 @@ async def handle_text_inputs(client: Client, message: Message):
     except Exception as e:
         await status_msg.edit_text(f"❌ Error: {str(e)}")
 
+# हाइलाइट बटन क्लिक हैंडलर
 @app.on_callback_query(filters.regex("^dl_hl_"))
 async def handle_highlight_callback(client: Client, callback_query: CallbackQuery):
     data = callback_query.data
@@ -320,4 +333,4 @@ if __name__ == "__main__":
     
     print("🤖 Bot & Web Server are running together...")
     app.run()
-  
+                
