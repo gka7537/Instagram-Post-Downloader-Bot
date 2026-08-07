@@ -56,6 +56,19 @@ async def check_force_sub(client: Client, user_id: int):
             
     return not_joined
 
+# 🛠️ कॉमन फोर्स सबस्क्रिप्शन मैसेज और बटन जेनरेटर
+def get_join_markup_and_message():
+    buttons = [[InlineKeyboardButton(f"📢 Join {ch}", url=f"https://t.me/{ch.replace('@', '')}")] for ch in FORCE_CHANNELS]
+    buttons.append([InlineKeyboardButton("🔄 Try Again / दोबारा कोशिश करें", callback_data="check_sub")])
+    
+    text = (
+        "⚠️ **पहले चैनल जॉइन करें! / Please join the channel first!**\n\n"
+        "बोट का उपयोग करने के लिए नीचे दिए गए सभी चैनलों को जॉइन करें:\n\n"
+        "💡 *Note: अगर आप पहले से जॉइन हैं, तो कृपया चैनल को Leave करके दोबारा Join करें!*\n"
+        "💡 *Note: If you have already joined, please leave and join the channel again!*"
+    )
+    return text, InlineKeyboardMarkup(buttons)
+
 @app.on_message(filters.command("start"))
 async def start_command(client: Client, message: Message):
     chat_id = message.chat.id
@@ -69,12 +82,8 @@ async def start_command(client: Client, message: Message):
     # 1. मल्टीपल फोर्स सबस्क्रिप्शन चेक
     missing_channels = await check_force_sub(client, chat_id)
     if missing_channels:
-        buttons = [[InlineKeyboardButton(f"📢 Join {ch}", url=f"https://t.me/{ch.replace('@', '')}")] for ch in missing_channels]
-        buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data="check_sub")])
-        await message.reply_text(
-            "⚠️ **पहले चैनल जॉइन करें! / Please join the channel first!**\n\nबोट का उपयोग करने के लिए नीचे दिए गए सभी चैनलों को जॉइन करें:",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
+        msg_text, markup = get_join_markup_and_message()
+        await message.reply_text(msg_text, reply_markup=markup)
         return
 
     # 2. वेरीफिकेशन चेक (Render में दिए गए समय के अनुसार)
@@ -109,10 +118,10 @@ async def sub_callback(client: Client, callback_query: CallbackQuery):
     chat_id = callback_query.message.chat.id
     missing_channels = await check_force_sub(client, chat_id)
     if missing_channels:
-        await callback_query.answer("❌ आपने अभी तक सभी चैनल जॉइन नहीं किए हैं!", show_alert=True)
+        await callback_query.answer("❌ आपने अभी तक सभी चैनल जॉइन नहीं किए हैं! (अगर पहले से हैं तो Leave करके दोबारा Join करें)", show_alert=True)
     else:
         await callback_query.message.delete()
-        await callback_query.message.reply_text("✅ धन्यवाद! अब आप `/start` टाइप करें।")
+        await callback_query.message.reply_text("✅ धन्यवाद! अब आप अपना काम जारी रखने के लिए दोबारा कमांड भेजें या `/start` टाइप करें।")
 
 @app.on_message(filters.command("login"))
 async def login_command(client: Client, message: Message):
@@ -148,9 +157,8 @@ async def handle_text_inputs(client: Client, message: Message):
     # फोर्स सबस्क्रिप्शन चेक
     missing_channels = await check_force_sub(client, chat_id)
     if missing_channels:
-        buttons = [[InlineKeyboardButton(f"📢 Join {ch}", url=f"https://t.me/{ch.replace('@', '')}")] for ch in missing_channels]
-        buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data="check_sub")])
-        await message.reply_text("⚠️ **कृपया पहले सभी चैनल जॉइन करें!**", reply_markup=InlineKeyboardMarkup(buttons))
+        msg_text, markup = get_join_markup_and_message()
+        await message.reply_text(msg_text, reply_markup=markup)
         return
 
     # वेरीफिकेशन चेक
@@ -226,7 +234,7 @@ async def handle_text_inputs(client: Client, message: Message):
             if len(parts) != 2: raise ValueError
             start_idx, end_idx = int(parts[0]), int(parts[1])
         except ValueError:
-            await message.reply_text("❌ गलत फॉर्मेट! केवल दो नंबर दें (जैसे: `1 20`):")
+            await message.reply_text("❌ गलत फॉर्मेट! केवल दो नंबर दें (जैसे्स: `1 20`):")
             return
 
         if (end_idx - start_idx + 1) > MAX_DOWNLOAD_LIMIT:
@@ -429,11 +437,3 @@ async def handle_highlight_callback(client: Client, callback_query: CallbackQuer
 
     parts = data.replace("dl_hl_", "").split("_", 1)
     username = parts[0]
-    hl_title = parts[1] if len(parts) > 1 else ""
-
-    await callback_query.answer(f"⏳ '{hl_title}' डाउनलोड हो रहा है...")
-    status_msg = await callback_query.message.reply_text(f"⏳ हाइलाइट **'{hl_title}'** डाउनलोड हो रहा है...")
-
-    zip_path = None
-    try:
-   
