@@ -238,6 +238,7 @@ async def handle_text_inputs(client: Client, message: Message):
             await status_msg.edit_text(f"❌ **Error / त्रुटि:** {str(e)}")
             USER_STATE.pop(chat_id, None)
         return
+
     if step == "waiting_for_range":
         target_username = state.get("target_username")
         try:
@@ -321,7 +322,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 await message.reply_document(document=zip_path, caption=f"✅ Highlight ZIP\n📦 Total / कुल: {count}")
                 await status_msg.delete()
             else:
-                await status_msg.edit_text("❌ हाइलाइट से कोई मीडिया नहीं मिला。\n❌ No media found in highlight.")
+                await status_msg.edit_text("❌ हाइलाइट से कोई मीडिया नहीं मिला।\n❌ No media found in highlight.")
         except Exception as e:
             await status_msg.edit_text(f"❌ Error / त्रुटि: {str(e)}")
         finally:
@@ -491,4 +492,5 @@ if __name__ == "__main__":
     
     print("🤖 Bot & Web Server are running together...")
     app.run()
+    
     
