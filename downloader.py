@@ -29,7 +29,7 @@ def _get_logged_in_loader(ig_username: str = None, ig_password: str = None):
                 L.login(ig_username, ig_password)
                 L.save_session_to_file(ig_username)
             except Exception as login_err:
-                raise Exception(f"Instagram Login Failed: {str(login_err)}")
+                raise Exception(f"Instagram Login Failed / इंस्टाग्राम लॉगिन विफल: {str(login_err)}")
     return L
 
 def interactive_instagram_login(username: str, password: str, verification_code: str = None) -> tuple:
@@ -54,27 +54,27 @@ def interactive_instagram_login(username: str, password: str, verification_code:
             if username in TEMP_LOGIN_SESSIONS:
                 del TEMP_LOGIN_SESSIONS[username]
                 
-            return True, "2FA Login Successful & Session Saved!"
+            return True, "2FA Login Successful & Session Saved! / 2FA लॉगिन सफल और सेशन सुरक्षित हो गया है!"
         else:
             L = instaloader.Instaloader()
             if os.path.exists(session_file):
                 try:
                     L.load_session_from_file(username)
-                    return True, "Session loaded successfully!"
+                    return True, "Session loaded successfully! / सेशन सफलतापूर्वक लोड हो गया!"
                 except Exception:
                     pass
 
             L.login(username, password)
             L.save_session_to_file(username)
-            return True, "Login Successful & Session Saved!"
+            return True, "Login Successful & Session Saved! / लॉगिन सफल और सेशन सुरक्षित हो गया है!"
             
     except instaloader.TwoFactorAuthRequiredException:
         TEMP_LOGIN_SESSIONS[username] = L
-        return "2FA_REQUIRED", "🔐 Two-Factor Authentication (2FA) is enabled. Please enter your 6-digit code:"
+        return "2FA_REQUIRED", "🔐 Two-Factor Authentication (2FA) is enabled. Please enter your 6-digit code:\n🔐 टू-फैक्टर ऑथेंटिकेशन (2FA) चालू है। कृपया अपना 6-अंकों का कोड दर्ज करें:"
     except instaloader.BadCredentialsException:
         if username in TEMP_LOGIN_SESSIONS:
             del TEMP_LOGIN_SESSIONS[username]
-        return False, "❌ Wrong username or password! Please check your details and try /login again."
+        return False, "❌ Wrong username/password! Please check details and try /login again.\n❌ गलत यूज़रनेम या पासवर्ड! कृपया जांच करें और दोबारा /login करें।"
     except Exception as e:
         if username in TEMP_LOGIN_SESSIONS:
             del TEMP_LOGIN_SESSIONS[username]
@@ -82,13 +82,14 @@ def interactive_instagram_login(username: str, password: str, verification_code:
         if "challenge" in error_msg or "checkpoint" in error_msg or "susicious" in error_msg or "login attempt" in error_msg:
             return "CHALLENGE_REQUIRED", (
                 "⚠️ **Instagram Security Block (New Location/IP Detection)!**\n"
-                "इंस्टाग्राम को लगता है कि यह लॉगिन किसी नई जगह से हो रहा है।\n\n"
-                "👉 **क्या करें:**\n"
-                "1. अपने फोन में आधिकारिक Instagram ऐप खोलें।\n"
-                "2. अगर 'It was me' (यह मैं ही हूँ) का ऑप्शन आए तो उसपर क्लिक करें।\n"
-                "3. इसके बाद यहाँ दोबारा `/login` से प्रयास करें।"
+                "⚠️ **इंस्टाग्राम सिक्योरिटी ब्लॉक (नई लोकेशन/IP का पता चला)!**\n\n"
+                "इंस्टाग्राम को लगता है कि यह लॉगिन किसी नई जगह से हो रहा है / Instagram thinks this login is from a new location.\n\n"
+                "👉 **क्या करें / What to do:**\n"
+                "1. अपने फोन में आधिकारिक Instagram ऐप खोलें / Open official Instagram app.\n"
+                "2. अगर 'It was me' (यह मैं ही हूँ) का ऑप्शन आए तो उसपर क्लिक करें / Click 'It was me' if it appears.\n"
+                "3. इसके बाद यहाँ दोबारा `/login` से प्रयास करें / Try `/login` here again."
             )
-        return False, f"❌ Login Failed: {str(e)}"
+        return False, f"❌ Login Failed / लॉगिन विफल: {str(e)}"
 
 def get_profile_stats(username: str, ig_username: str = None, ig_password: str = None) -> dict:
     L = instaloader.Instaloader(
@@ -147,19 +148,29 @@ def download_specific_content(username: str, start_idx: int, end_idx: int, ig_us
 
 def download_single_link(url_or_shortcode: str) -> tuple:
     """
-    yt-dlp का उपयोग करके बिना किसी लॉगिन के सीधे पब्लिक पोस्ट या रील का वीडियो/तस्वीर डाउनलोड करता है।
+    पहले yt-dlp से कोशिश करता है। अगर फेल हो जाए या मल्टी-इमेज हो, तो instaloader का उपयोग करता है।
     """
     if "instagram.com" not in url_or_shortcode:
         clean_input = url_or_shortcode.strip("/")
         url = f"https://www.instagram.com/p/{clean_input}/"
+        shortcode = clean_input
     else:
         url = url_or_shortcode.split("?")[0]
+        clean_input = url.strip("/")
+        parts = clean_input.split("/")
+        if "p" in parts:
+            shortcode = parts[parts.index("p") + 1]
+        elif "reel" in parts:
+            shortcode = parts[parts.index("reel") + 1]
+        else:
+            shortcode = clean_input.split("/")[-1]
 
-    target_dir = "ytdlp_downloads"
+    target_dir = f"single_{shortcode}"
     if os.path.exists(target_dir): 
         shutil.rmtree(target_dir)
     os.makedirs(target_dir, exist_ok=True)
 
+    # पहले yt-dlp से ट्राई करते हैं
     ydl_opts = {
         'outtmpl': os.path.join(target_dir, '%(id)s.%(ext)s'),
         'format': 'best',
@@ -167,13 +178,26 @@ def download_single_link(url_or_shortcode: str) -> tuple:
         'no_warnings': True,
     }
 
+    success_download = False
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-    except Exception as e:
-        if os.path.exists(target_dir):
-            shutil.rmtree(target_dir, ignore_errors=True)
-        raise Exception(f"Download failed: {str(e)}")
+        success_download = True
+    except Exception:
+        # अगर yt-dlp फेल हो जाए, तो instaloader से डाउनलोड करेंगे
+        try:
+            L = instaloader.Instaloader(
+                download_videos=True, download_pictures=True, 
+                download_geotags=False, download_comments=False, 
+                save_metadata=False, compress_json=False
+            )
+            post = instaloader.Post.from_shortcode(L.context, shortcode)
+            L.download_post(post, target=target_dir)
+            success_download = True
+        except Exception as e:
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir, ignore_errors=True)
+            raise Exception(f"Download failed / डाउनलोड विफल: {str(e)}")
 
     files = []
     for root, _, filenames in os.walk(target_dir):
@@ -184,13 +208,13 @@ def download_single_link(url_or_shortcode: str) -> tuple:
     if not files:
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
-        raise Exception("No media found or link is private/expired.")
+        raise Exception("No media found or link is private/expired. / कोई मीडिया नहीं मिला या लिंक प्राइवेट/एक्सपायर है।")
 
     return files, target_dir
 
 def get_highlights_list(username: str, ig_username: str = None, ig_password: str = None):
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to view highlights. Please login first using /login.")
+        raise Exception("❌ बिना लॉगिन के हाइलाइट नहीं देखा जा सकता! पहले /login करें।\n❌ Instagram login is mandatory to view highlights. Please login first using /login.")
     
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -200,7 +224,7 @@ def get_highlights_list(username: str, ig_username: str = None, ig_password: str
 
 def download_specific_highlight(username: str, highlight_title: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download highlights. Please login first using /login.")
+        raise Exception("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले /login करें।\n❌ Instagram login is mandatory to download highlights. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -230,7 +254,7 @@ def download_specific_highlight(username: str, highlight_title: str, ig_username
 
 def download_highlight_by_link(url: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download highlights. Please login first using /login.")
+        raise Exception("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले /login करें।\n❌ Instagram login is mandatory to download highlights. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     target_dir = "highlight_direct"
@@ -246,7 +270,7 @@ def download_highlight_by_link(url: str, ig_username: str = None, ig_password: s
             break
 
     if not highlight_id:
-        raise Exception("Invalid Highlight link! Please send a valid Instagram Highlight link.")
+        raise Exception("Invalid Highlight link! Please send a valid Instagram Highlight link.\nअमान्य हाइलाइट लिंक! कृपया एक सही इंस्टाग्राम हाइलाइट लिंक भेजें।")
 
     highlight = instaloader.Highlight(L.context, int(highlight_id))
     count = 0
@@ -263,7 +287,7 @@ def download_highlight_by_link(url: str, ig_username: str = None, ig_password: s
 
 def download_user_stories(username: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download stories. Please login first using /login.")
+        raise Exception("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें।\n❌ Instagram login is mandatory to download stories. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -287,7 +311,7 @@ def download_user_stories(username: str, ig_username: str = None, ig_password: s
 
 def download_story_by_link(url: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if not ig_username or not ig_password:
-        raise Exception("Instagram login is mandatory to download stories. Please login first using /login.")
+        raise Exception("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें।\n❌ Instagram login is mandatory to download stories. Please login first using /login.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     target_dir = "story_direct"
@@ -309,7 +333,7 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
                 break
 
         if not story_media_id or not target_username:
-            raise Exception("Invalid Story link! Please send a valid Instagram Story link.")
+            raise Exception("Invalid Story link! Please send a valid Instagram Story link.\nअमान्य स्टोरी लिंक! कृपया एक सही इंस्टाग्राम स्टोरी लिंक भेजें।")
 
         profile = instaloader.Profile.from_username(L.context, target_username)
         downloaded = False
@@ -324,7 +348,7 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
                 break
 
         if not downloaded:
-            raise Exception("This story has expired or is not public.")
+            raise Exception("This story has expired or is not public.\nयह स्टोरी एक्सपायर हो चुकी है या पब्लिक नहीं है।")
 
         files = []
         for root, _, filenames in os.walk(target_dir):
@@ -336,5 +360,5 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
     except Exception as e:
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
-        raise Exception(f"Unable to download story: {str(e)}")
-        
+        raise Exception(f"Unable to download story / स्टोरी डाउनलोड करने में असमर्थ: {str(e)}")
+    
