@@ -4,6 +4,7 @@ import shutil
 import asyncio
 import threading
 import requests
+from pathlib import Path
 from flask import Flask
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -17,6 +18,7 @@ from downloader import (
 ACTIVE_LOGINS = {}
 USER_VERIFY = {}  # {chat_id: expiry_timestamp}
 MAX_DOWNLOAD_LIMIT = 50
+COOKIES_FILE = Path(__file__).resolve().parent / "cookies.txt"
 
 app = Client("insta_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 USER_STATE = {}
@@ -111,7 +113,7 @@ async def start_command(client: Client, message: Message):
     help_text = (
         "🤖 **Instagram Advanced Downloader Bot**\n\n"
         "✨ **इस्तेमाल करने का तरीका / How to use:**\n"
-        "1. `/login` - अकाउंट लॉगिन करें / Login your account (Permanent Session)\n"
+        "1. `/login` - अकाउंट लॉगिन करें / Login your account (Permanent Session या Cookies)\n"
         "2. किसी भी यूजर का **यूजरनेम या लिंक** भेजें $\rightarrow$ कुल पोस्ट्स दिखेंगे / Send username or link.\n"
         "3. रेंज भेजें (जैसे: `1 20`) $\rightarrow$ ZIP फाइल मिल जाएगी / Send range for ZIP.\n"
         "4. `/story` या `/highlight` का उपयोग करें / Use /story or /highlight."
@@ -137,19 +139,42 @@ async def sub_callback(client: Client, callback_query: CallbackQuery):
         await callback_query.answer("❌ आपने अभी तक सभी चैनल जॉइन नहीं किए हैं!\nYou haven't joined all channels yet!", show_alert=True)
     else:
         await callback_query.message.delete()
-        await callback_query.message.reply_text("✅ धन्यवाद! अब अपना काम जारी रखने के लिए `/start` टाइप करें।\n✅ Thank you! Type `/start` to continue.")
+        await callback_query.message.reply_text("✅ धन्यवाद! अब अपना काम जारी रखने के लिए `/start` टाइप करें。\n✅ Thank you! Type `/start` to continue.")
 
 @app.on_message(filters.command("login"))
 async def login_command(client: Client, message: Message):
     chat_id = message.chat.id
-    await message.reply_text("👤 कृपया अपना Instagram **Username** भेजें:\nPlease send your Instagram **Username**:")
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🍪 Upload Cookies.txt (Recommended)", callback_data="login_cookies")],
+        [InlineKeyboardButton("🔑 Username, Password & 2FA", callback_data="login_creds")]
+    ])
+    await message.reply_text(
+        "🔐 **लॉगिन का तरीका चुनें / Choose Login Method:**\n\n"
+        "• **Cookies.txt:** बिना किसी ब्लॉक या 2FA समस्या के डाउनलोड करने के लिए।\n"
+        "• **Username/2FA:** अपने अकाउंट से सीधे लॉगिन करें।",
+        reply_markup=markup
+    )
+
+@app.on_callback_query(filters.regex("login_cookies"))
+async def login_cookies_callback(client: Client, callback_query: CallbackQuery):
+    chat_id = callback_query.message.chat.id
+    USER_STATE[chat_id] = {"step": "waiting_for_cookies_file"}
+    await callback_query.message.edit_text(
+        "📥 **कृपया अपनी `cookies.txt` फाइल यहाँ भेजें (Waiting for file):**\n\n"
+        "💡 (Netscape फॉर्मेट वाली कुकी फाइल डॉक्यूमेन्ट के रूप में अपलोड करें)।"
+    )
+
+@app.on_callback_query(filters.regex("login_creds"))
+async def login_creds_callback(client: Client, callback_query: CallbackQuery):
+    chat_id = callback_query.message.chat.id
     USER_STATE[chat_id] = {"step": "waiting_for_ig_username"}
+    await callback_query.message.edit_text("👤 कृपया अपना Instagram **Username** भेजें:\nPlease send your Instagram **Username**:")
 
 @app.on_message(filters.command("highlight"))
 async def highlight_command(client: Client, message: Message):
     chat_id = message.chat.id
     login_data = ACTIVE_LOGINS.get(chat_id)
-    if not login_data:
+    if not login_data and not COOKIES_FILE.exists():
         await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले `/login` करें。\n❌ Login required to download highlights! Please `/login` first.")
         return
     await message.reply_text("📂 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसके हाइलाइट्स देखने हैं:\nPlease send username/link to view highlights:")
@@ -159,17 +184,16 @@ async def highlight_command(client: Client, message: Message):
 async def story_command(client: Client, message: Message):
     chat_id = message.chat.id
     login_data = ACTIVE_LOGINS.get(chat_id)
-    if not login_data:
+    if not login_data and not COOKIES_FILE.exists():
         await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले `/login` करें。\n❌ Login required to download stories! Please `/login` first.")
         return
     await message.reply_text("👀 कृपया उस Instagram **यूजरनेम** या **प्रोफाइल लिंक** को भेजें जिसकी स्टोरीज डाउनलोड करनी हैं:\nPlease send username/link to download stories:")
     USER_STATE[chat_id] = {"step": "waiting_for_story_username"}
 
-@app.on_message(filters.text & ~filters.command(["start", "highlight", "story", "login"]))
+@app.on_message(filters.document | filters.text & ~filters.command(["start", "highlight", "story", "login"]))
 async def handle_text_inputs(client: Client, message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    text = message.text.strip()
     
     missing_channels = await check_force_sub(client, user_id)
     if missing_channels:
@@ -184,6 +208,27 @@ async def handle_text_inputs(client: Client, message: Message):
 
     state = USER_STATE.get(chat_id, {})
     step = state.get("step")
+
+    # ── Cookies File Waiting Handler ──
+    if step == "waiting_for_cookies_file":
+        if message.document:
+            if not message.document.file_name.endswith('.txt'):
+                await message.reply_text("❌ कृपया केवल `.txt` फॉर्मेट की फाइल भेजें!")
+                return
+            status_msg = await message.reply_text("⏳ कुकी फाइल सेव की जा रही है...")
+            file_path = await message.download()
+            with open(file_path, "rb") as f:
+                COOKIES_FILE.write_bytes(f.read())
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            USER_STATE.pop(chat_id, None)
+            await status_msg.edit_text("🎉 **Cookies.txt सफलतापूर्वक सेव हो गई है!**\nअब बोट बिना किसी पासवर्ड या 2FA के आसानी से काम करेगा।")
+            return
+        else:
+            await message.reply_text("❌ कृपया अपनी `cookies.txt` फाइल डॉक्यूमेंट के रूप में भेजें (Waiting for file)...")
+            return
+
+    text = message.text.strip() if message.text else ""
 
     if step == "waiting_for_ig_username":
         USER_STATE[chat_id] = {"step": "waiting_for_ig_password", "ig_username": text}
@@ -207,10 +252,10 @@ async def handle_text_inputs(client: Client, message: Message):
                 USER_STATE[chat_id] = {"step": "waiting_for_2fa", "ig_username": username, "ig_password": password}
                 await status_msg.edit_text(msg)
             elif success == "CHALLENGE_REQUIRED":
-                await status_msg.edit_text(msg)
+                await status_msg.edit_text(f"{msg}\n\n💡 *सुझाव:* यदि यह ब्लॉक न हटे, तो `/login` दबाकर **Cookies.txt** का विकल्प चुनें।")
                 USER_STATE.pop(chat_id, None)
             else:
-                await status_msg.edit_text(f"{msg}\n\n🔄 `/login` से दोबारा प्रयास करें / Try again with `/login`.")
+                await status_msg.edit_text(f"{msg}\n\n🔄 `/login` से दोबारा प्रयास करें या **Cookies.txt** अपलोड करें।")
                 USER_STATE.pop(chat_id, None)
         except Exception as e:
             await status_msg.edit_text(f"❌ **Error / त्रुटि:** {str(e)}")
@@ -232,7 +277,7 @@ async def handle_text_inputs(client: Client, message: Message):
                 await status_msg.edit_text(f"🎉 **2FA Success & Permanent Session Saved!**\n🎉 **2FA सफल और सेशन सुरक्षित हो गया है!**\n✨ {msg}")
                 USER_STATE.pop(chat_id, None)
             else:
-                await status_msg.edit_text(f"❌ **Wrong 2FA Code! / गलत 2FA कोड!**\n{msg}")
+                await status_msg.edit_text(f"❌ **Wrong 2FA Code! / गलत 2FA कोड!**\n💡 यदि 2FA असफल हो जाए, तो `/login` पर जाकर **Cookies.txt** अपलोड करें।")
                 USER_STATE.pop(chat_id, None)
         except Exception as e:
             await status_msg.edit_text(f"❌ **Error / त्रुटि:** {str(e)}")
@@ -280,15 +325,17 @@ async def handle_text_inputs(client: Client, message: Message):
 
     if "instagram.com/stories/" in text and "highlights" not in text:
         login_data = ACTIVE_LOGINS.get(chat_id)
-        if not login_data:
+        if not login_data and not COOKIES_FILE.exists():
             await message.reply_text("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले `/login` करें。\n❌ Login required to download stories! Please `/login` first.")
             return
         status_msg = await message.reply_text("⏳ स्टोरी डाउनलोड की जा रही है...\n⏳ Downloading story...")
         target_dir = None
         try:
             loop = asyncio.get_running_loop()
+            ig_u = login_data["username"] if login_data else None
+            ig_p = login_data["password"] if login_data else None
             files, target_dir = await loop.run_in_executor(
-                None, download_story_by_link, text, login_data["username"], login_data["password"]
+                None, download_story_by_link, text, ig_u, ig_p
             )
             if files:
                 for file in files:
@@ -308,15 +355,17 @@ async def handle_text_inputs(client: Client, message: Message):
 
     if "instagram.com/stories/highlights/" in text:
         login_data = ACTIVE_LOGINS.get(chat_id)
-        if not login_data:
+        if not login_data and not COOKIES_FILE.exists():
             await message.reply_text("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले `/login` करें。\n❌ Login required to download highlights! Please `/login` first.")
             return
         status_msg = await message.reply_text("⏳ हाइलाइट ZIP डाउनलोड की जा रही है...\n⏳ Downloading highlight ZIP...")
         zip_path = None
         try:
             loop = asyncio.get_running_loop()
+            ig_u = login_data["username"] if login_data else None
+            ig_p = login_data["password"] if login_data else None
             zip_path, count = await loop.run_in_executor(
-                None, download_highlight_by_link, text, login_data["username"], login_data["password"]
+                None, download_highlight_by_link, text, ig_u, ig_p
             )
             if zip_path and os.path.exists(zip_path):
                 await message.reply_document(document=zip_path, caption=f"✅ Highlight ZIP\n📦 Total / कुल: {count}")
@@ -363,8 +412,10 @@ async def handle_text_inputs(client: Client, message: Message):
         status_msg = await message.reply_text(f"🔍 **@{username}** के हाइलाइट्स खोजे जा रहे हैं...\n🔍 Searching highlights for @{username}...")
         try:
             loop = asyncio.get_running_loop()
+            ig_u = login_data["username"] if login_data else None
+            ig_p = login_data["password"] if login_data else None
             highlights = await loop.run_in_executor(
-                None, get_highlights_list, username, login_data["username"], login_data["password"]
+                None, get_highlights_list, username, ig_u, ig_p
             )
             if not highlights:
                 await status_msg.edit_text("❌ कोई हाइलाइट नहीं मिला。\n❌ No highlights found.")
@@ -386,8 +437,10 @@ async def handle_text_inputs(client: Client, message: Message):
         target_dir = None
         try:
             loop = asyncio.get_running_loop()
+            ig_u = login_data["username"] if login_data else None
+            ig_p = login_data["password"] if login_data else None
             files, target_dir = await loop.run_in_executor(
-                None, download_user_stories, username, login_data["username"], login_data["password"]
+                None, download_user_stories, username, ig_u, ig_p
             )
             if not files:
                 await status_msg.edit_text("❌ कोई एक्टिव स्टोरी नहीं मिली。\n❌ No active story found.")
@@ -443,9 +496,8 @@ async def handle_highlight_callback(client: Client, callback_query: CallbackQuer
     data = callback_query.data
     chat_id = callback_query.message.chat.id
     login_data = ACTIVE_LOGINS.get(chat_id)
-    if not login_data:
-        await callback_query.answer("लॉगिन समाप्त हो गया है, कृपया फिर से लॉगिन करें!\nLogin expired, please login again!", show_alert=True)
-        return
+    ig_u = login_data["username"] if login_data else None
+    ig_p = login_data["password"] if login_data else None
 
     parts = data.replace("dl_hl_", "").split("_", 1)
     username = parts[0]
@@ -458,7 +510,7 @@ async def handle_highlight_callback(client: Client, callback_query: CallbackQuer
     try:
         loop = asyncio.get_running_loop()
         zip_path, count = await loop.run_in_executor(
-            None, download_specific_highlight, username, hl_title, login_data["username"], login_data["password"]
+            None, download_specific_highlight, username, hl_title, ig_u, ig_p
         )
         if zip_path and os.path.exists(zip_path):
             await callback_query.message.reply_document(document=zip_path, caption=f"✅ Highlight: `{hl_title}`\n📦 Count / कुल: {count}")
