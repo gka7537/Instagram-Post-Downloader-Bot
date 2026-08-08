@@ -242,26 +242,20 @@ def download_single_link(url_or_shortcode: str, ig_username: str = None, ig_pass
     # 2. अगर yt-dlp फेल हो जाए (जैसे फोटो+वीडियो एल्बम होने पर), तो cookies.txt के साथ instaloader का उपयोग करेंगे
     if not success_download:
         try:
-            L = instaloader.Instaloader(
-                download_videos=True, download_pictures=True, 
-                download_geotags=False, download_comments=False, 
-                save_metadata=False, compress_json=False
-            )
-            
-            # यहाँ cookies.txt को instaloader के लिए जोड़ दिया गया है
-            if COOKIES_FILE.exists():
-                try:
-                    L.context.load_session_from_file("cookies", str(COOKIES_FILE))
-                except Exception:
-                    pass
-
+            # ── यहाँ सुनिश्चित किया गया है कि instaloader हमेशा _get_logged_in_loader का उपयोग करे या कुकीज़ लोड करे ──
             if ig_username and ig_password:
-                try:
-                    session_file = f"session-{ig_username}"
-                    if os.path.exists(session_file):
-                        L.load_session_from_file(ig_username, session_file)
-                except Exception:
-                    pass
+                L = _get_logged_in_loader(ig_username, ig_password)
+            else:
+                L = instaloader.Instaloader(
+                    download_videos=True, download_pictures=True, 
+                    download_geotags=False, download_comments=False, 
+                    save_metadata=False, compress_json=False
+                )
+                if COOKIES_FILE.exists():
+                    try:
+                        L.context.load_session_from_file("cookies", str(COOKIES_FILE))
+                    except Exception:
+                        pass
 
             post = instaloader.Post.from_shortcode(L.context, shortcode)
             L.download_post(post, target=target_dir)
@@ -384,7 +378,7 @@ def download_user_stories(username: str, ig_username: str = None, ig_password: s
 
 def download_story_by_link(url: str, ig_username: str = None, ig_password: str = None) -> tuple:
     if (not ig_username or not ig_password) and not COOKIES_FILE.exists():
-        raise Exception("❌ बिना लॉगिन या कुकीज़ के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें या cookies.txt अपलोड करें।\n❌ Instagram login or cookies file is mandatory to download stories.")
+        raiseException("❌ बिना लॉगिन या कुकीज़ के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें या cookies.txt अपलोड करें।\n❌ Instagram login or cookies file is mandatory to download stories.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     target_dir = "story_direct"
@@ -434,4 +428,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story / स्टोरी डाउनलोड करने में असमर्थ: {str(e)}")
-                    
+        
