@@ -35,6 +35,13 @@ def _get_logged_in_loader(ig_username: str = None, ig_password: str = None):
         compress_json=False
     )
 
+    # ── यहाँ cookies.txt का सपोर्ट जोड़ दिया गया है (बिना पुराना कोड हटाए) ──
+    if COOKIES_FILE.exists():
+        try:
+            L.context.load_session_from_file("cookies", str(COOKIES_FILE))
+        except Exception:
+            pass
+
     if ig_username and ig_password:
         session_file = f"session-{ig_username}"
         try:
@@ -116,6 +123,12 @@ def get_profile_stats(username: str, ig_username: str = None, ig_password: str =
     L = instaloader.Instaloader(
         download_videos=False, download_pictures=False, download_geotags=False, download_comments=False, save_metadata=False
     )
+    if COOKIES_FILE.exists():
+        try:
+            L.context.load_session_from_file("cookies", str(COOKIES_FILE))
+        except Exception:
+            pass
+
     if ig_username and ig_password:
         try: 
             L = _get_logged_in_loader(ig_username, ig_password)
@@ -138,6 +151,11 @@ def download_specific_content(username: str, start_idx: int, end_idx: int, ig_us
             L = instaloader.Instaloader(download_videos=True, download_pictures=True, save_metadata=False, compress_json=False)
     else:
         L = instaloader.Instaloader(download_videos=True, download_pictures=True, save_metadata=False, compress_json=False)
+        if COOKIES_FILE.exists():
+            try:
+                L.context.load_session_from_file("cookies", str(COOKIES_FILE))
+            except Exception:
+                pass
 
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
     target_dir = f"temp_{clean_username}_posts"
@@ -221,17 +239,30 @@ def download_single_link(url_or_shortcode: str, ig_username: str = None, ig_pass
     except Exception:
         pass
 
-    # 2. अगर yt-dlp फेल हो जाए (जैसे फोटो+वीडियो एल्बम होने पर), तो instaloader का उपयोग करेंगे
+    # 2. अगर yt-dlp फेल हो जाए (जैसे फोटो+वीडियो एल्बम होने पर), तो cookies.txt के साथ instaloader का उपयोग करेंगे
     if not success_download:
         try:
+            L = instaloader.Instaloader(
+                download_videos=True, download_pictures=True, 
+                download_geotags=False, download_comments=False, 
+                save_metadata=False, compress_json=False
+            )
+            
+            # यहाँ cookies.txt को instaloader के लिए जोड़ दिया गया है
+            if COOKIES_FILE.exists():
+                try:
+                    L.context.load_session_from_file("cookies", str(COOKIES_FILE))
+                except Exception:
+                    pass
+
             if ig_username and ig_password:
-                L = _get_logged_in_loader(ig_username, ig_password)
-            else:
-                L = instaloader.Instaloader(
-                    download_videos=True, download_pictures=True, 
-                    download_geotags=False, download_comments=False, 
-                    save_metadata=False, compress_json=False
-                )
+                try:
+                    session_file = f"session-{ig_username}"
+                    if os.path.exists(session_file):
+                        L.load_session_from_file(ig_username, session_file)
+                except Exception:
+                    pass
+
             post = instaloader.Post.from_shortcode(L.context, shortcode)
             L.download_post(post, target=target_dir)
             success_download = True
@@ -254,8 +285,9 @@ def download_single_link(url_or_shortcode: str, ig_username: str = None, ig_pass
     return files, target_dir
 
 def get_highlights_list(username: str, ig_username: str = None, ig_password: str = None):
-    if not ig_username or not ig_password:
-        raise Exception("❌ बिना लॉगिन के हाइलाइट नहीं देखा जा सकता! पहले /login करें。\n❌ Instagram login is mandatory to view highlights. Please login first using /login.")
+    # ── यहाँ चेक को फ्लेक्सिबल बनाया गया है ताकि cookies होने पर भी हाइलाइट्स लोड हो सकें ──
+    if (not ig_username or not ig_password) and not COOKIES_FILE.exists():
+        raise Exception("❌ बिना लॉगिन या कुकीज़ के हाइलाइट नहीं देखा जा सकता! पहले /login करें या cookies.txt अपलोड करें।\n❌ Instagram login or cookies file is mandatory to view highlights.")
     
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -264,8 +296,8 @@ def get_highlights_list(username: str, ig_username: str = None, ig_password: str
     return [{"title": h.title, "id": str(h.unique_id) if hasattr(h, 'unique_id') else h.title} for h in highlights]
 
 def download_specific_highlight(username: str, highlight_title: str, ig_username: str = None, ig_password: str = None) -> tuple:
-    if not ig_username or not ig_password:
-        raise Exception("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले /login करें。\n❌ Instagram login is mandatory to download highlights. Please login first using /login.")
+    if (not ig_username or not ig_password) and not COOKIES_FILE.exists():
+        raise Exception("❌ बिना लॉगिन या कुकीज़ के हाइलाइट डाउनलोड नहीं हो सकता! पहले /login करें या cookies.txt अपलोड करें।\n❌ Instagram login or cookies file is mandatory to download highlights.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -294,8 +326,8 @@ def download_specific_highlight(username: str, highlight_title: str, ig_username
     return f"{zip_filename}.zip", count
 
 def download_highlight_by_link(url: str, ig_username: str = None, ig_password: str = None) -> tuple:
-    if not ig_username or not ig_password:
-        raise Exception("❌ बिना लॉगिन के हाइलाइट डाउनलोड नहीं हो सकता! पहले /login करें。\n❌ Instagram login is mandatory to download highlights. Please login first using /login.")
+    if (not ig_username or not ig_password) and not COOKIES_FILE.exists():
+        raise Exception("❌ बिना लॉगिन या कुकीज़ के हाइलाइट डाउनलोड नहीं हो सकता! पहले /login करें या cookies.txt अपलोड करें।\n❌ Instagram login or cookies file is mandatory to download highlights.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     target_dir = "highlight_direct"
@@ -327,8 +359,8 @@ def download_highlight_by_link(url: str, ig_username: str = None, ig_password: s
     return f"{zip_filename}.zip", count
 
 def download_user_stories(username: str, ig_username: str = None, ig_password: str = None) -> tuple:
-    if not ig_username or not ig_password:
-        raise Exception("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें。\n❌ Instagram login is mandatory to download stories. Please login first using /login.")
+    if (not ig_username or not ig_password) and not COOKIES_FILE.exists():
+        raise Exception("❌ बिना लॉगिन या कुकीज़ के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें या cookies.txt अपलोड करें।\n❌ Instagram login or cookies file is mandatory to download stories.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     clean_username = username.split("?")[0].strip("/").split("/")[-1].replace("@", "")
@@ -351,8 +383,8 @@ def download_user_stories(username: str, ig_username: str = None, ig_password: s
     return files, target_dir
 
 def download_story_by_link(url: str, ig_username: str = None, ig_password: str = None) -> tuple:
-    if not ig_username or not ig_password:
-        raise Exception("❌ बिना लॉगिन के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें。\n❌ Instagram login is mandatory to download stories. Please login first using /login.")
+    if (not ig_username or not ig_password) and not COOKIES_FILE.exists():
+        raise Exception("❌ बिना लॉगिन या कुकीज़ के स्टोरी डाउनलोड नहीं हो सकती! पहले /login करें या cookies.txt अपलोड करें।\n❌ Instagram login or cookies file is mandatory to download stories.")
 
     L = _get_logged_in_loader(ig_username, ig_password)
     target_dir = "story_direct"
@@ -402,4 +434,4 @@ def download_story_by_link(url: str, ig_username: str = None, ig_password: str =
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir, ignore_errors=True)
         raise Exception(f"Unable to download story / स्टोरी डाउनलोड करने में असमर्थ: {str(e)}")
-            
+                    
